@@ -1,17 +1,29 @@
 use actix_web::{error, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use futures::StreamExt;
 use json::JsonValue;
+use r2d2_postgres::r2d2::Pool;
+use r2d2_postgres::{r2d2, PostgresConnectionManager};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::NoTls;
-use std::sync::Arc;
-use r2d2_postgres::{PostgresConnectionManager, r2d2};
-use r2d2_postgres::r2d2::Pool;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Book {
+    #[serde(skip_deserializing)]
+    id: i32,
     title: String,
     author: String,
     publication_year: i32,
+}
+
+impl Book {
+    pub fn new(id: i32, title: String, author: String, publication_year: i32) -> Self {
+        Book {
+            id,
+            title,
+            author,
+            publication_year,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,22 +39,62 @@ mod embedded {
 
 /// This handler uses json extractor
 async fn index() -> HttpResponse {
-    HttpResponse::Ok().body("Hello")
+    HttpResponse::Ok().body("OK")
 }
 
-async fn books_get(pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>, req: HttpRequest) -> HttpResponse {
-    let rows = pool.get().unwrap()
-        // .query("SELECT $1::TEXT", &[&"hello world"]);
-        .query("select id, name, author from books;", &[]);
+#[derive(Debug, Deserialize)]
+pub struct Params {
+    #[serde(default)]
+    offset: i32,
+}
 
-    let x = rows.unwrap();
-    let mut vec: Vec<String> = vec![];
+async fn books_get(
+    pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>,
+    req: HttpRequest,
+) -> HttpResponse {
+   let params = web::Query::<Params>::from_query(req.query_string()).unwrap();
+    println!("offset {}", params.offset);
 
-    for z in x {
-        vec.push(z.get(1));
-    }
+    let rows = pool.get().unwrap().query(
+        "select id, name, author, publication_year from books offset $1::INT limit $2::INT",
+        &[&params.offset, &10],
+    );
 
-    HttpResponse::Ok().json(vec)
+    let books = rows
+        .unwrap()
+        .iter()
+        .map(|rec| {
+            Book::new(
+                rec.get("id"),
+                rec.get("name"),
+                rec.get("author"),
+                rec.get("publication_year"),
+            )
+        })
+        .collect::<Vec<Book>>();
+
+    HttpResponse::Ok().json(books)
+}
+
+async fn books_post(
+    pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>,
+    item: web::Json<Book>,
+    req: HttpRequest,
+) -> HttpResponse {
+    println!("request: {:?}", req);
+    println!("model: {:?}", item);
+
+    let rows = pool
+        .get()
+        .unwrap()
+        .execute(
+            "insert into books (name, author, publication_year) values ($1::TEXT, $2::TEXT, $3::INT)",
+            &[&item.title, &item.author, &item.publication_year],
+        );
+
+    println!("{} rows updated", rows.unwrap());
+
+    HttpResponse::Created().json(item.0)
 }
 
 /// This handler uses json extractor with limit
@@ -116,25 +168,18 @@ async fn run_migrations() -> std::result::Result<(), Error1> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    std::env::set_var("RUST_LOG", "actix_web=info");
+    std::env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::init();
 
     run_migrations().expect("can run DB migrations: {}");
 
-    // let (mut client, conn) =
-    //     tokio_postgres::connect("host=localhost user=postgres password=example", NoTls).await.unwrap();
-
     let manager = PostgresConnectionManager::new(
-        "host=localhost user=postgres password=example".parse().unwrap(),
+        "host=localhost user=postgres password=example"
+            .parse()
+            .unwrap(),
         NoTls,
     );
     let pool = r2d2::Pool::new(manager).unwrap();
-
-    // tokio::spawn(async move {
-    //     if let Err(e) = conn.await {
-    //         eprintln!("connection error: {}", e);
-    //     }
-    // });
 
     HttpServer::new(move || {
         App::new()
@@ -151,8 +196,11 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/manual").route(web::post().to(index_manual)))
             .service(web::resource("/mjsonrust").route(web::post().to(index_mjsonrust)))
             .service(web::resource("/").route(web::get().to(index)))
-            .service(web::resource("/books")
-                .route(web::get().to(books_get)))
+            .service(
+                web::resource("/books")
+                    .route(web::get().to(books_get))
+                    .route(web::post().to(books_post)),
+            )
     })
     .bind("127.0.0.1:8080")?
     .run()
@@ -167,6 +215,31 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_index() -> Result<(), Error> {
+        let mut app =
+            test::init_service(App::new().service(web::resource("/").route(web::get().to(index))))
+                .await;
+
+        let req = test::TestRequest::get()
+            .uri("/")
+            .to_request();
+
+        let resp = app.call(req).await.unwrap();
+
+        assert_eq!(resp.status(), http::StatusCode::OK);
+
+        let response_body = match resp.response().body().as_ref() {
+            Some(actix_web::body::Body::Bytes(bytes)) => bytes,
+            _ => panic!("Response error"),
+        };
+
+        assert_eq!(response_body, "OK");
+
+        Ok(())
+    }
+
+    #[actix_rt::test]
+    #[ignore]
+    async fn test_post() -> Result<(), Error> {
         let mut app =
             test::init_service(App::new().service(web::resource("/").route(web::post().to(index))))
                 .await;
