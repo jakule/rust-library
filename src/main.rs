@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tokio_postgres::NoTls;
 
 use crate::handlers::{books_get, books_post, index};
+use crate::models::ApiError;
 
 mod handlers;
 mod models;
@@ -122,6 +123,15 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/").route(web::get().to(index)))
             .service(
                 web::resource("/books")
+                    .data(web::JsonConfig::default().error_handler(|err, _| {
+                        let err_msg = format!("{:?}", err);
+
+                        error::InternalError::from_response(
+                            err,
+                            HttpResponse::BadRequest().json(ApiError::new(err_msg)),
+                        )
+                        .into()
+                    }))
                     .route(web::get().to(books_get))
                     .route(web::post().to(books_post)),
             )

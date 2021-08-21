@@ -1,9 +1,9 @@
-use r2d2_postgres::PostgresConnectionManager;
-use r2d2_postgres::r2d2::Pool;
 use crate::models::Book;
 use actix_web::{web, HttpRequest, HttpResponse};
 use r2d2_postgres::postgres::NoTls;
-use serde::{Deserialize};
+use r2d2_postgres::r2d2::Pool;
+use r2d2_postgres::PostgresConnectionManager;
+use serde::Deserialize;
 
 /// This handler uses json extractor
 pub async fn index() -> HttpResponse {
@@ -52,13 +52,10 @@ pub async fn books_post(
     println!("request: {:?}", req);
     println!("model: {:?}", item);
 
-    let rows = pool
-        .get()
-        .unwrap()
-        .execute(
-            "insert into books (name, author, publication_year) values ($1::TEXT, $2::TEXT, $3::INT)",
-            &[&item.title, &item.author, &item.publication_year],
-        );
+    let rows = pool.get().unwrap().execute(
+        "insert into books (name, author, publication_year) values ($1::TEXT, $2::TEXT, $3::INT)",
+        &[&item.title, &item.author, &item.publication_year],
+    );
 
     println!("{} rows updated", rows.unwrap());
 

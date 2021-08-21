@@ -1,6 +1,17 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ApiError {
+    message: String,
+}
+
+impl ApiError {
+    pub fn new(message: String) -> Self {
+        ApiError { message }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Book {
     #[serde(skip_deserializing)]
     id: i32,
