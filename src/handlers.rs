@@ -61,7 +61,7 @@ pub async fn books_post(
 
     println!("added new book id:{}", new_id);
 
-    let mut new_book = item.0.clone();
+    let mut new_book = item.0;
 
     new_book.id = new_id;
 
