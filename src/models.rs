@@ -11,10 +11,10 @@ impl ApiError {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Book {
     #[serde(skip_deserializing)]
-    id: i32,
+    pub(crate) id: i32,
     pub(crate) title: String,
     pub(crate) author: String,
     pub(crate) publication_year: i32,

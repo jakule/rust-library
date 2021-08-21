@@ -52,12 +52,18 @@ pub async fn books_post(
     println!("request: {:?}", req);
     println!("model: {:?}", item);
 
-    let rows = pool.get().unwrap().execute(
-        "insert into books (name, author, publication_year) values ($1::TEXT, $2::TEXT, $3::INT)",
+    let rows = pool.get().unwrap().query_one(
+        "insert into books (name, author, publication_year) values ($1::TEXT, $2::TEXT, $3::INT) returning id",
         &[&item.title, &item.author, &item.publication_year],
     );
 
-    println!("{} rows updated", rows.unwrap());
+    let new_id: i32 = rows.unwrap().get(0);
 
-    HttpResponse::Created().json(item.0)
+    println!("added new book id:{}", new_id);
+
+    let mut new_book = item.0.clone();
+
+    new_book.id = new_id;
+
+    HttpResponse::Created().json(new_book)
 }
