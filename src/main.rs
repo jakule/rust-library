@@ -1,30 +1,14 @@
 use actix_web::{error, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use futures::StreamExt;
 use json::JsonValue;
-use r2d2_postgres::r2d2::Pool;
 use r2d2_postgres::{r2d2, PostgresConnectionManager};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::NoTls;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Book {
-    #[serde(skip_deserializing)]
-    id: i32,
-    title: String,
-    author: String,
-    publication_year: i32,
-}
+use crate::handlers::{books_get, books_post, index};
 
-impl Book {
-    pub fn new(id: i32, title: String, author: String, publication_year: i32) -> Self {
-        Book {
-            id,
-            title,
-            author,
-            publication_year,
-        }
-    }
-}
+mod handlers;
+mod models;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct MyObj {
@@ -35,66 +19,6 @@ struct MyObj {
 mod embedded {
     use refinery::embed_migrations;
     embed_migrations!("migrations");
-}
-
-/// This handler uses json extractor
-async fn index() -> HttpResponse {
-    HttpResponse::Ok().body("OK")
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Params {
-    #[serde(default)]
-    offset: i32,
-}
-
-async fn books_get(
-    pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>,
-    req: HttpRequest,
-) -> HttpResponse {
-   let params = web::Query::<Params>::from_query(req.query_string()).unwrap();
-    println!("offset {}", params.offset);
-
-    let rows = pool.get().unwrap().query(
-        "select id, name, author, publication_year from books offset $1::INT limit $2::INT",
-        &[&params.offset, &10],
-    );
-
-    let books = rows
-        .unwrap()
-        .iter()
-        .map(|rec| {
-            Book::new(
-                rec.get("id"),
-                rec.get("name"),
-                rec.get("author"),
-                rec.get("publication_year"),
-            )
-        })
-        .collect::<Vec<Book>>();
-
-    HttpResponse::Ok().json(books)
-}
-
-async fn books_post(
-    pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>,
-    item: web::Json<Book>,
-    req: HttpRequest,
-) -> HttpResponse {
-    println!("request: {:?}", req);
-    println!("model: {:?}", item);
-
-    let rows = pool
-        .get()
-        .unwrap()
-        .execute(
-            "insert into books (name, author, publication_year) values ($1::TEXT, $2::TEXT, $3::INT)",
-            &[&item.title, &item.author, &item.publication_year],
-        );
-
-    println!("{} rows updated", rows.unwrap());
-
-    HttpResponse::Created().json(item.0)
 }
 
 /// This handler uses json extractor with limit
@@ -138,10 +62,10 @@ async fn index_mjsonrust(body: web::Bytes) -> Result<HttpResponse, Error> {
         .body(injson.dump()))
 }
 
-type Error1 = Box<dyn std::error::Error + Send + Sync + 'static>;
+type MigrationError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 #[tokio::main]
-async fn run_migrations() -> std::result::Result<(), Error1> {
+async fn run_migrations() -> std::result::Result<(), MigrationError> {
     println!("Running DB migrations...");
     let (mut client, con) =
         tokio_postgres::connect("host=localhost user=postgres password=example", NoTls).await?;
@@ -219,9 +143,7 @@ mod tests {
             test::init_service(App::new().service(web::resource("/").route(web::get().to(index))))
                 .await;
 
-        let req = test::TestRequest::get()
-            .uri("/")
-            .to_request();
+        let req = test::TestRequest::get().uri("/").to_request();
 
         let resp = app.call(req).await.unwrap();
 
