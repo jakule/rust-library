@@ -1,4 +1,5 @@
-use crate::models::Book;
+use crate::models::{Book, GoogleBooksRoot};
+use actix_web::web::Buf;
 use actix_web::{client, web, HttpRequest, HttpResponse};
 use log::info;
 use r2d2_postgres::postgres::NoTls;
@@ -70,8 +71,8 @@ pub async fn books_post(
 }
 
 pub async fn books_import(
-    pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>,
-    req: HttpRequest,
+    _pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>,
+    _req: HttpRequest,
 ) -> HttpResponse {
     let client = client::Client::new();
 
@@ -79,10 +80,14 @@ pub async fn books_import(
 
     let resp = req.send().await;
 
-    let r = resp.unwrap();
+    let mut r = resp.unwrap();
 
     info!("Status: {}", r.status());
-    info!("Response: {:?}", r);
+
+    let body = r.body().await;
+
+    let books: GoogleBooksRoot = serde_json::from_slice(body.unwrap().bytes()).unwrap();
+    info!("Response: {:?}", books);
 
     HttpResponse::Ok().finish()
 }
