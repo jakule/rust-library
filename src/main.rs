@@ -1,11 +1,12 @@
 use actix_web::{error, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use futures::StreamExt;
 use json::JsonValue;
+use log::{error, info};
 use r2d2_postgres::{r2d2, PostgresConnectionManager};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::NoTls;
 
-use crate::handlers::{books_get, books_post, index};
+use crate::handlers::{books_get, books_import, books_post, index};
 use crate::models::ApiError;
 
 mod handlers;
@@ -24,8 +25,8 @@ mod embedded {
 
 /// This handler uses json extractor with limit
 async fn extract_item(item: web::Json<MyObj>, req: HttpRequest) -> HttpResponse {
-    println!("request: {:?}", req);
-    println!("model: {:?}", item);
+    info!("request: {:?}", req);
+    info!("model: {:?}", item);
 
     HttpResponse::Ok().json(item.0) // <- send json response
 }
@@ -67,33 +68,33 @@ type MigrationError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 #[tokio::main]
 async fn run_migrations() -> std::result::Result<(), MigrationError> {
-    println!("Running DB migrations...");
+    info!("Running DB migrations...");
     let (mut client, con) =
         tokio_postgres::connect("host=localhost user=postgres password=example", NoTls).await?;
 
     tokio::spawn(async move {
         if let Err(e) = con.await {
-            eprintln!("connection error: {}", e);
+            error!("connection error: {}", e);
         }
     });
     let migration_report = embedded::migrations::runner()
         .run_async(&mut client)
         .await?;
     for migration in migration_report.applied_migrations() {
-        println!(
+        info!(
             "Migration Applied -  Name: {}, Version: {}",
             migration.name(),
             migration.version()
         );
     }
-    println!("DB migrations finished!");
+    info!("DB migrations finished!");
 
     Ok(())
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    std::env::set_var("RUST_LOG", "actix_web=debug");
+    std::env::set_var("RUST_LOG", "rust_library=debug,actix_web=debug");
     env_logger::init();
 
     run_migrations().expect("can run DB migrations: {}");
@@ -135,6 +136,7 @@ async fn main() -> std::io::Result<()> {
                     .route(web::get().to(books_get))
                     .route(web::post().to(books_post)),
             )
+            .service(web::resource("/import/books").route(web::get().to(books_import)))
     })
     .bind("127.0.0.1:8080")?
     .run()
