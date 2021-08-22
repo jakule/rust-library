@@ -56,13 +56,6 @@ pub async fn books_post(
 
     let new_id: i32 = item.0.save(&pool);
 
-    // let rows = pool.get().unwrap().query_one(
-    //     "insert into books (name, author, publication_date) values ($1::TEXT, $2::TEXT, $3) returning id",
-    //     &[&item.title, &item.author, &item.publication_date],
-    // );
-    //
-    // let new_id: i32 = rows.unwrap().get(0);
-
     info!("added new book id:{}", new_id);
 
     let mut new_book = item.0;
