@@ -453,6 +453,7 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
+ "serde",
  "time 0.1.44",
  "winapi 0.3.9",
 ]
@@ -1313,6 +1314,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "430f4131e1b7657b0cd9a2b0c3408d77c9a43a042d300b8c77f981dffcc43a2f"
 dependencies = [
  "bytes 1.0.1",
+ "chrono",
  "fallible-iterator",
  "postgres-protocol",
 ]
@@ -1563,6 +1565,7 @@ dependencies = [
  "actix-rt",
  "actix-service",
  "actix-web",
+ "chrono",
  "env_logger",
  "futures",
  "json",

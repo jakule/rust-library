@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::handlers::PgPool;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiError {
     message: String,
@@ -17,17 +19,31 @@ pub struct Book {
     pub(crate) id: i32,
     pub(crate) title: String,
     pub(crate) author: String,
-    pub(crate) publication_year: i32,
+    pub(crate) publication_date: chrono::NaiveDate,
 }
 
 impl Book {
-    pub fn new(id: i32, title: String, author: String, publication_year: i32) -> Self {
+    pub fn new(
+        id: i32,
+        title: String,
+        author: String,
+        publication_date: chrono::NaiveDate,
+    ) -> Self {
         Book {
             id,
             title,
             author,
-            publication_year,
+            publication_date,
         }
+    }
+
+    pub fn save(&self, conn: &PgPool) -> i32 {
+        let rows = conn.get().unwrap().query_one(
+            "insert into books (name, author, publication_date) values ($1::TEXT, $2::TEXT, $3) returning id",
+            &[&self.title, &self.author, &self.publication_date],
+        );
+
+        rows.unwrap().get(0)
     }
 }
 
