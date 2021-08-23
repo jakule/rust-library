@@ -6,7 +6,7 @@ use r2d2_postgres::{r2d2, PostgresConnectionManager};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::NoTls;
 
-use crate::handlers::{books_get, books_import, books_post, index};
+use crate::handlers::{books_delete, books_get, books_import, books_post, index};
 use crate::models::ApiError;
 
 mod handlers;
@@ -136,6 +136,7 @@ async fn main() -> std::io::Result<()> {
                     .route(web::get().to(books_get))
                     .route(web::post().to(books_post)),
             )
+            .service(books_delete)
             .service(web::resource("/import/books").route(web::get().to(books_import)))
     })
     .bind("127.0.0.1:8080")?

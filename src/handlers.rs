@@ -1,7 +1,7 @@
 use crate::models::{Book, GoogleBooksRoot};
 use actix_web::web::Buf;
-use actix_web::{client, web, HttpRequest, HttpResponse};
-use log::info;
+use actix_web::{client, delete, web, HttpRequest, HttpResponse};
+use log::{error, info};
 use r2d2_postgres::postgres::NoTls;
 use r2d2_postgres::r2d2::Pool;
 use r2d2_postgres::PostgresConnectionManager;
@@ -63,6 +63,35 @@ pub async fn books_post(
     new_book.id = new_id;
 
     HttpResponse::Created().json(new_book)
+}
+
+#[delete("/books/{id}")]
+pub async fn books_delete(
+    id: web::Path<i32>,
+    pool: web::Data<PgPool>,
+    _req: HttpRequest,
+) -> HttpResponse {
+    info!("called delete with id {}", id);
+
+    let affected = pool
+        .get()
+        .unwrap()
+        .execute("delete from books where id = $1::INTEGER", &[&id.0]);
+
+    match affected {
+        Ok(records) => {
+            if records == 0 {
+                HttpResponse::NotFound().finish()
+            } else {
+                HttpResponse::NoContent().finish()
+            }
+        }
+        Err(err) => {
+            error!("failed to delete a book {}", err);
+
+            HttpResponse::InternalServerError().finish()
+        }
+    }
 }
 
 pub async fn books_import(
