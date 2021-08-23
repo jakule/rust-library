@@ -18,7 +18,7 @@ pub struct Book {
     #[serde(skip_deserializing)]
     pub(crate) id: i32,
     pub(crate) title: String,
-    pub(crate) author: String,
+    pub(crate) authors: Vec<String>,
     pub(crate) publication_date: chrono::NaiveDate,
 }
 
@@ -26,21 +26,21 @@ impl Book {
     pub fn new(
         id: i32,
         title: String,
-        author: String,
+        authors: Vec<String>,
         publication_date: chrono::NaiveDate,
     ) -> Self {
         Book {
             id,
             title,
-            author,
+            authors,
             publication_date,
         }
     }
 
     pub fn save(&self, conn: &PgPool) -> i32 {
         let rows = conn.get().unwrap().query_one(
-            "insert into books (name, author, publication_date) values ($1::TEXT, $2::TEXT, $3) returning id",
-            &[&self.title, &self.author, &self.publication_date],
+            "insert into books (name, author, publication_date) values ($1::TEXT, $2, $3) returning id",
+            &[&self.title, &self.authors, &self.publication_date],
         );
 
         rows.unwrap().get(0)
