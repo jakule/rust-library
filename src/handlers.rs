@@ -94,24 +94,65 @@ pub async fn books_delete(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ImportBooksParams {
+    q: String,
+}
+
 pub async fn books_import(
-    _pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>,
+    pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>,
+    query: web::Query<ImportBooksParams>,
     _req: HttpRequest,
 ) -> HttpResponse {
+    info!("called books import with query {:?}", query.q);
+
+    if query.q.is_empty() {
+        return HttpResponse::BadRequest().finish();
+    }
+
+    let url = format!("https://www.googleapis.com/books/v1/volumes?q={}", query.q);
+
     let client = client::Client::new();
 
-    let req = client.get("https://www.googleapis.com/books/v1/volumes?q=Hobbit");
-
+    let req = client.get(url);
     let resp = req.send().await;
-
     let mut r = resp.unwrap();
 
-    info!("Status: {}", r.status());
+    info!("API returned response with HTTP code: {}", r.status());
 
     let body = r.body().await;
 
     let books: GoogleBooksRoot = serde_json::from_slice(body.unwrap().bytes()).unwrap();
-    info!("Response: {:?}", books);
+
+    info!("API returned {} records", books.items.len());
+
+    for book in books.items {
+        let published_data = book.volume_info.published_date;
+
+        let publication_date = if published_data.len() == 4 {
+            let year: i32 = published_data.parse().unwrap();
+            Ok(chrono::NaiveDate::from_ymd(year, 1, 1))
+        } else if published_data.len() == 10 {
+            chrono::NaiveDate::parse_from_str(&published_data, "%Y-%m-%d")
+        } else {
+            Ok(chrono::NaiveDate::from_ymd(0, 1, 1))
+        };
+
+        if publication_date.is_err() {
+            error!("failed for {}", published_data);
+
+            continue;
+        }
+
+        let new_book = Book::new(
+            0,
+            book.volume_info.title,
+            book.volume_info.authors,
+            publication_date.unwrap(),
+        );
+
+        new_book.save(&pool);
+    }
 
     HttpResponse::Ok().finish()
 }
