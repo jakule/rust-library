@@ -67,10 +67,16 @@ async fn index_mjsonrust(body: web::Bytes) -> Result<HttpResponse, Error> {
 type MigrationError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 #[tokio::main]
-async fn run_migrations() -> std::result::Result<(), MigrationError> {
+async fn run_migrations(
+    username: &String,
+    password: &String,
+) -> std::result::Result<(), MigrationError> {
     info!("Running DB migrations...");
-    let (mut client, con) =
-        tokio_postgres::connect("host=localhost user=postgres password=example", NoTls).await?;
+    let (mut client, con) = tokio_postgres::connect(
+        &*format!("host={} user=postgres password={}", username, password),
+        NoTls,
+    )
+    .await?;
 
     tokio::spawn(async move {
         if let Err(e) = con.await {
@@ -94,15 +100,23 @@ async fn run_migrations() -> std::result::Result<(), MigrationError> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    dotenv::dotenv().ok();
+
     std::env::set_var("RUST_LOG", "rust_library=debug,actix_web=debug");
     env_logger::init();
 
-    run_migrations().expect("can run DB migrations: {}");
+    let postgres_host = std::env::var("POSTGRES_HOST").unwrap();
+    let postgres_password = std::env::var("POSTGRES_PASSWORD").unwrap();
+
+    run_migrations(&postgres_host, &postgres_password).expect("can run DB migrations: {}");
 
     let manager = PostgresConnectionManager::new(
-        "host=localhost user=postgres password=example"
-            .parse()
-            .unwrap(),
+        format!(
+            "host={} user=postgres password={}",
+            &postgres_host, &postgres_password
+        )
+        .parse()
+        .unwrap(),
         NoTls,
     );
     let pool = r2d2::Pool::new(manager).unwrap();
@@ -139,7 +153,7 @@ async fn main() -> std::io::Result<()> {
             .service(books_delete)
             .service(web::resource("/import/books").route(web::get().to(books_import)))
     })
-    .bind("127.0.0.1:8080")?
+    .bind("0.0.0.0:8080")?
     .run()
     .await
 }

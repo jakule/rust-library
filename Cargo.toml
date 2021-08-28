@@ -19,6 +19,7 @@ refinery = { version = "0.6", features = ["tokio-postgres"] }
 tokio-postgres = { version = "0.7.2", features = ["with-chrono-0_4"] }
 tokio = { version = "1.10.0", features = ["full"] }
 r2d2_postgres = "0.18.1"
+dotenv = "0.15.0"
 
 [dev-dependencies]
 actix-rt = "1"
