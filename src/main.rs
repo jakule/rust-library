@@ -68,8 +68,8 @@ type MigrationError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 #[tokio::main]
 async fn run_migrations(
-    username: &String,
-    password: &String,
+    username: &str,
+    password: &str,
 ) -> std::result::Result<(), MigrationError> {
     info!("Running DB migrations...");
     let (mut client, con) = tokio_postgres::connect(
