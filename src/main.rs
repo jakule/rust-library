@@ -67,10 +67,7 @@ async fn index_mjsonrust(body: web::Bytes) -> Result<HttpResponse, Error> {
 type MigrationError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 #[tokio::main]
-async fn run_migrations(
-    username: &str,
-    password: &str,
-) -> std::result::Result<(), MigrationError> {
+async fn run_migrations(username: &str, password: &str) -> std::result::Result<(), MigrationError> {
     info!("Running DB migrations...");
     let (mut client, con) = tokio_postgres::connect(
         &*format!("host={} user=postgres password={}", username, password),
@@ -105,8 +102,9 @@ async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", "rust_library=debug,actix_web=debug");
     env_logger::init();
 
-    let postgres_host = std::env::var("POSTGRES_HOST").unwrap();
-    let postgres_password = std::env::var("POSTGRES_PASSWORD").unwrap();
+    let postgres_host = std::env::var("POSTGRES_HOST").expect("POSTGRES_HOST is not set");
+    let postgres_password =
+        std::env::var("POSTGRES_PASSWORD").expect("POSTGRES_PASSWORD is not set");
 
     run_migrations(&postgres_host, &postgres_password).expect("can run DB migrations: {}");
 
@@ -148,9 +146,10 @@ async fn main() -> std::io::Result<()> {
                         .into()
                     }))
                     .route(web::get().to(books_get))
-                    .route(web::post().to(books_post)),
+                    .route(web::post().to(books_post))
+                    .route(web::delete().to(books_delete)),
             )
-            .service(books_delete)
+            .service(web::resource("/books/{id}").route(web::delete().to(books_delete)))
             .service(web::resource("/import/books").route(web::get().to(books_import)))
     })
     .bind("0.0.0.0:8080")?

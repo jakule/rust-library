@@ -1,6 +1,6 @@
 use crate::models::{Book, GoogleBooksRoot};
 use actix_web::web::Buf;
-use actix_web::{client, delete, web, HttpRequest, HttpResponse};
+use actix_web::{client, web, Error, HttpRequest, HttpResponse};
 use log::{error, info};
 use r2d2_postgres::postgres::NoTls;
 use r2d2_postgres::r2d2::Pool;
@@ -10,7 +10,6 @@ use serde::Deserialize;
 pub(crate) type PgConnManager = PostgresConnectionManager<NoTls>;
 pub(crate) type PgPool = Pool<PgConnManager>;
 
-/// This handler uses json extractor
 pub async fn index() -> HttpResponse {
     HttpResponse::Ok().body("OK")
 }
@@ -21,17 +20,34 @@ pub struct Params {
     offset: i32,
 }
 
-pub async fn books_get(pool: web::Data<PgPool>, req: HttpRequest) -> HttpResponse {
-    let params = web::Query::<Params>::from_query(req.query_string()).unwrap();
-    info!("offset {}", params.offset);
+pub async fn books_get(pool: web::Data<PgPool>, req: HttpRequest) -> Result<HttpResponse, Error> {
+    let params = web::Query::<Params>::from_query(req.query_string());
 
-    let rows = pool.get().unwrap().query(
+    let offset = match params {
+        Ok(param) => param.0.offset,
+        Err(_) => return Ok(HttpResponse::BadRequest().body("incorrect query params")),
+    };
+
+    info!("offset {}", &offset);
+
+    let conn = pool.get();
+
+    let mut conn = match conn {
+        Ok(conn) => conn,
+        Err(_) => return Ok(HttpResponse::InternalServerError().finish()),
+    };
+
+    let rows = conn.query(
         "select id, name, author, publication_date from books offset $1::INT limit $2::INT",
-        &[&params.offset, &10],
+        &[&offset, &10],
     );
 
+    let rows = match rows {
+        Ok(rows) => rows,
+        Err(_) => return Ok(HttpResponse::InternalServerError().finish()),
+    };
+
     let books = rows
-        .unwrap()
         .iter()
         .map(|rec| {
             Book::new(
@@ -43,7 +59,7 @@ pub async fn books_get(pool: web::Data<PgPool>, req: HttpRequest) -> HttpRespons
         })
         .collect::<Vec<Book>>();
 
-    HttpResponse::Ok().json(books)
+    Ok(HttpResponse::Ok().json(books))
 }
 
 pub async fn books_post(
@@ -65,7 +81,6 @@ pub async fn books_post(
     HttpResponse::Created().json(new_book)
 }
 
-#[delete("/books/{id}")]
 pub async fn books_delete(
     id: web::Path<i32>,
     pool: web::Data<PgPool>,
