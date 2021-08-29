@@ -1,3 +1,5 @@
 .idea
 
 /target
+/data.db
+/waypoint-restore.db.lock
