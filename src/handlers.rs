@@ -1,6 +1,7 @@
 use crate::models::{Book, GoogleBooksRoot};
 use actix_web::web::Buf;
 use actix_web::{client, web, Error, HttpRequest, HttpResponse};
+use actix_web_httpauth::extractors::bearer::BearerAuth;
 use log::{error, info};
 use r2d2_postgres::postgres::NoTls;
 use r2d2_postgres::r2d2::Pool;
@@ -18,6 +19,16 @@ pub async fn index() -> HttpResponse {
 pub struct Params {
     #[serde(default)]
     offset: i32,
+}
+
+fn check_token(auth: BearerAuth) -> Result<(), Error> {
+    let token = std::env::var("SECRET_TOKEN").unwrap();
+
+    if auth.token() != token {
+        return Err(Error::from(HttpResponse::Unauthorized().finish()));
+    }
+
+    Ok(())
 }
 
 pub async fn books_get(pool: web::Data<PgPool>, req: HttpRequest) -> Result<HttpResponse, Error> {
@@ -65,8 +76,11 @@ pub async fn books_get(pool: web::Data<PgPool>, req: HttpRequest) -> Result<Http
 pub async fn books_post(
     pool: web::Data<Pool<PostgresConnectionManager<NoTls>>>,
     item: web::Json<Book>,
+    auth: BearerAuth,
     req: HttpRequest,
-) -> HttpResponse {
+) -> Result<HttpResponse, Error> {
+    check_token(auth)?;
+
     info!("request: {:?}", req);
     info!("model: {:?}", item);
 
@@ -78,14 +92,17 @@ pub async fn books_post(
 
     new_book.id = new_id;
 
-    HttpResponse::Created().json(new_book)
+    Ok(HttpResponse::Created().json(new_book))
 }
 
 pub async fn books_delete(
     id: web::Path<i32>,
     pool: web::Data<PgPool>,
+    auth: BearerAuth,
     _req: HttpRequest,
-) -> HttpResponse {
+) -> Result<HttpResponse, Error> {
+    check_token(auth)?;
+
     info!("called delete with id {}", id);
 
     let affected = pool
@@ -96,15 +113,15 @@ pub async fn books_delete(
     match affected {
         Ok(records) => {
             if records == 0 {
-                HttpResponse::NotFound().finish()
+                Ok(HttpResponse::NotFound().finish())
             } else {
-                HttpResponse::NoContent().finish()
+                Ok(HttpResponse::NoContent().finish())
             }
         }
         Err(err) => {
             error!("failed to delete a book {}", err);
 
-            HttpResponse::InternalServerError().finish()
+            Ok(HttpResponse::InternalServerError().finish())
         }
     }
 }

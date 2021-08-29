@@ -1,3 +1,5 @@
+use crate::handlers::{books_delete, books_get, books_import, books_post, index};
+use crate::models::ApiError;
 use actix_web::{error, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use futures::StreamExt;
 use json::JsonValue;
@@ -5,9 +7,6 @@ use log::{error, info};
 use r2d2_postgres::{r2d2, PostgresConnectionManager};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::NoTls;
-
-use crate::handlers::{books_delete, books_get, books_import, books_post, index};
-use crate::models::ApiError;
 
 mod handlers;
 mod models;
@@ -120,6 +119,8 @@ async fn main() -> std::io::Result<()> {
     let pool = r2d2::Pool::new(manager).unwrap();
 
     HttpServer::new(move || {
+        // let auth = HttpAuthentication::bearer(validator);
+
         App::new()
             // enable logger
             .wrap(middleware::Logger::default())
@@ -135,7 +136,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/mjsonrust").route(web::post().to(index_mjsonrust)))
             .service(web::resource("/").route(web::get().to(index)))
             .service(
-                web::resource("/books")
+                web::scope("/books")
                     .data(web::JsonConfig::default().error_handler(|err, _| {
                         let err_msg = format!("{:?}", err);
 
@@ -145,11 +146,10 @@ async fn main() -> std::io::Result<()> {
                         )
                         .into()
                     }))
-                    .route(web::get().to(books_get))
-                    .route(web::post().to(books_post))
-                    .route(web::delete().to(books_delete)),
+                    .route("", web::get().to(books_get))
+                    .route("", web::post().to(books_post))
+                    .route("/{id}", web::delete().to(books_delete)),
             )
-            .service(web::resource("/books/{id}").route(web::delete().to(books_delete)))
             .service(web::resource("/import/books").route(web::get().to(books_import)))
     })
     .bind("0.0.0.0:8080")?
